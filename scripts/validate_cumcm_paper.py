@@ -9,6 +9,7 @@ from __future__ import print_function
 
 import argparse
 import io
+import json
 import os
 import re
 import sys
@@ -312,6 +313,23 @@ def inspect_support(path, ai_state, forbidden, errors, warnings, support_pdf_ver
             errors.append("AI detail PDF is missing from support material")
 
 
+def inspect_citation_report(path, errors):
+    """Require the separate online verifier to have produced a PASS report."""
+    if not os.path.isfile(path):
+        errors.append("citation verification report does not exist")
+        return
+    try:
+        with open(path, "rb") as handle:
+            report = json.loads(handle.read().decode("utf-8-sig"))
+    except (IOError, OSError, ValueError) as exc:
+        errors.append("cannot read citation verification report: {0}".format(exc))
+        return
+    if report.get("result") != "PASS":
+        errors.append("citation verification report is not PASS: {0}".format(report.get("result", "missing")))
+    if not isinstance(report.get("verified_count"), int) or report.get("verified_count") < 1:
+        errors.append("citation verification report has no verified references")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Validate key CUMCM 2026 electronic-paper constraints.")
     parser.add_argument("paper", help="DOCX/PDF paper or TXT/Markdown fixture")
@@ -323,6 +341,7 @@ def main():
     parser.add_argument("--pdf-layout-verified", action="store_true", help="Confirm separate page-by-page PDF render inspection")
     parser.add_argument("--pdf-metadata-verified", action="store_true", help="Confirm PDF metadata and identity fields were inspected")
     parser.add_argument("--support-pdf-verified", action="store_true", help="Confirm every support PDF was text/layout/metadata inspected")
+    parser.add_argument("--citation-report", help="JSON report from scripts/verify_references.py; must be PASS")
     parser.add_argument("--expect-ai", choices=("used", "unused", "unknown"), default="unknown")
     parser.add_argument("--forbidden", action="append", default=[], help="Identity string to reject everywhere")
     parser.add_argument("--allow-warning", action="store_true")
@@ -334,6 +353,8 @@ def main():
     unverified = []
     paragraphs = []
     paper_sources = []
+    if args.citation_report:
+        inspect_citation_report(args.citation_report, errors)
     paper = os.path.abspath(args.paper)
     ext = os.path.splitext(paper)[1].lower()
 
@@ -453,5 +474,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
 
